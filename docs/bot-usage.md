@@ -26,7 +26,8 @@ optional arguments:
   --version             show program's version number and exit
   -c PATH, --config PATH
                         Specify configuration file (default: None). Multiple
-                        --config options may be used.
+                        --config options may be used. Can be set to '-' to
+                        read config from stdin.
   -d PATH, --datadir PATH
                         Path to backtest data.
   -s NAME, --strategy NAME
@@ -48,7 +49,7 @@ The bot allows you to select which configuration file you want to use. Per
 default, the bot will load the file `./config.json`
 
 ```bash
-python3 freqtrade -c path/far/far/away/config.json
+freqtrade -c path/far/far/away/config.json
 ```
 
 ### How to use multiple configuration files?
@@ -64,13 +65,13 @@ empty key and secrete values while running in the Dry Mode (which does not actua
 require them):
 
 ```bash
-python3 freqtrade -c ./config.json
+freqtrade -c ./config.json
 ```
 
 and specify both configuration files when running in the normal Live Trade Mode:
 
 ```bash
-python3 freqtrade -c ./config.json -c path/to/secrets/keys.config.json
+freqtrade -c ./config.json -c path/to/secrets/keys.config.json
 ```
 
 This could help you hide your private Exchange key and Exchange secrete on you local machine
@@ -96,26 +97,26 @@ In `user_data/strategies` you have a file `my_awesome_strategy.py` which has
 a strategy class called `AwesomeStrategy` to load it:
 
 ```bash
-python3 freqtrade --strategy AwesomeStrategy
+freqtrade --strategy AwesomeStrategy
 ```
 
 If the bot does not find your strategy file, it will display in an error
 message the reason (File not found, or errors in your code).
 
 Learn more about strategy file in
-[optimize your bot](bot-optimization.md).
+[Strategy Customization](strategy-customization.md).
 
 ### How to use **--strategy-path**?
 
 This parameter allows you to add an additional strategy lookup path, which gets
-checked before the default locations (The passed path must be a folder!):
+checked before the default locations (The passed path must be a directory!):
 ```bash
-python3 freqtrade --strategy AwesomeStrategy --strategy-path /some/folder
+freqtrade --strategy AwesomeStrategy --strategy-path /some/directory
 ```
 
 #### How to install a strategy?
 
-This is very simple. Copy paste your strategy file into the folder
+This is very simple. Copy paste your strategy file into the directory
 `user_data/strategies` or use `--strategy-path`. And voila, the bot is ready to use it.
 
 ### How to use **--dynamic-whitelist**?
@@ -137,7 +138,7 @@ using `--db-url`. This can also be used to specify a custom database
 in production mode. Example command:
 
 ```bash
-python3 freqtrade -c config.json --db-url sqlite:///tradesv3.dry_run.sqlite
+freqtrade -c config.json --db-url sqlite:///tradesv3.dry_run.sqlite
 ```
 
 ## Backtesting commands
@@ -296,4 +297,4 @@ in [misc.py](https://github.com/freqtrade/freqtrade/blob/develop/freqtrade/misc.
 ## Next step
 
 The optimal strategy of the bot will change with time depending of the market trends. The next step is to
-[optimize your bot](bot-optimization.md).
+[Strategy Customization](strategy-customization.md).

@@ -1,10 +1,10 @@
 # pragma pylint: disable=missing-docstring, C0103
-
 import argparse
 
 import pytest
 
-from freqtrade.arguments import Arguments, TimeRange
+from freqtrade.arguments import (ARGS_DOWNLOADER, ARGS_PLOT_DATAFRAME,
+                                 Arguments, TimeRange, check_int_positive)
 
 
 # Parse common command-line-arguments. Used for all tools
@@ -19,7 +19,7 @@ def test_parse_args_defaults() -> None:
     assert args.config == ['config.json']
     assert args.strategy_path is None
     assert args.datadir is None
-    assert args.loglevel == 0
+    assert args.verbosity == 0
 
 
 def test_parse_args_config() -> None:
@@ -42,16 +42,16 @@ def test_parse_args_db_url() -> None:
 
 def test_parse_args_verbose() -> None:
     args = Arguments(['-v'], '').get_parsed_arg()
-    assert args.loglevel == 1
+    assert args.verbosity == 1
 
     args = Arguments(['--verbose'], '').get_parsed_arg()
-    assert args.loglevel == 1
+    assert args.verbosity == 1
 
 
-def test_scripts_options() -> None:
+def test_common_scripts_options() -> None:
     arguments = Arguments(['-p', 'ETH/BTC'], '')
-    arguments.scripts_options()
-    args = arguments.get_parsed_arg()
+    arguments.build_args(ARGS_DOWNLOADER)
+    args = arguments.parse_args()
     assert args.pairs == 'ETH/BTC'
 
 
@@ -146,7 +146,7 @@ def test_parse_args_backtesting_custom() -> None:
     call_args = Arguments(args, '').get_parsed_arg()
     assert call_args.config == ['test_conf.json']
     assert call_args.live is True
-    assert call_args.loglevel == 0
+    assert call_args.verbosity == 0
     assert call_args.subparser == 'backtesting'
     assert call_args.func is not None
     assert call_args.ticker_interval == '1m'
@@ -165,23 +165,59 @@ def test_parse_args_hyperopt_custom() -> None:
     call_args = Arguments(args, '').get_parsed_arg()
     assert call_args.config == ['test_conf.json']
     assert call_args.epochs == 20
-    assert call_args.loglevel == 0
+    assert call_args.verbosity == 0
     assert call_args.subparser == 'hyperopt'
     assert call_args.spaces == ['buy']
     assert call_args.func is not None
 
 
-def test_testdata_dl_options() -> None:
+def test_download_data_options() -> None:
     args = [
         '--pairs-file', 'file_with_pairs',
-        '--export', 'export/folder',
+        '--datadir', 'datadir/directory',
         '--days', '30',
         '--exchange', 'binance'
     ]
     arguments = Arguments(args, '')
-    arguments.testdata_dl_options()
+    arguments.build_args(ARGS_DOWNLOADER)
+
     args = arguments.parse_args()
     assert args.pairs_file == 'file_with_pairs'
-    assert args.export == 'export/folder'
+    assert args.datadir == 'datadir/directory'
     assert args.days == 30
     assert args.exchange == 'binance'
+
+
+def test_plot_dataframe_options() -> None:
+    args = [
+        '--indicators1', 'sma10,sma100',
+        '--indicators2', 'macd,fastd,fastk',
+        '--plot-limit', '30',
+        '-p', 'UNITTEST/BTC',
+    ]
+    arguments = Arguments(args, '')
+    arguments.build_args(ARGS_PLOT_DATAFRAME)
+    pargs = arguments.parse_args(True)
+    assert pargs.indicators1 == "sma10,sma100"
+    assert pargs.indicators2 == "macd,fastd,fastk"
+    assert pargs.plot_limit == 30
+    assert pargs.pairs == "UNITTEST/BTC"
+
+
+def test_check_int_positive() -> None:
+
+    assert check_int_positive("3") == 3
+    assert check_int_positive("1") == 1
+    assert check_int_positive("100") == 100
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        check_int_positive("-2")
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        check_int_positive("0")
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        check_int_positive("3.5")
+
+    with pytest.raises(argparse.ArgumentTypeError):
+        check_int_positive("DeadBeef")

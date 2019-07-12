@@ -12,10 +12,11 @@ from jsonschema import Draft4Validator, ValidationError, validate
 
 from freqtrade import OperationalException, constants
 from freqtrade.arguments import Arguments
-from freqtrade.configuration import Configuration, set_loggers
+from freqtrade.configuration import Configuration
 from freqtrade.constants import DEFAULT_DB_DRYRUN_URL, DEFAULT_DB_PROD_URL
+from freqtrade.loggers import _set_loggers
 from freqtrade.state import RunMode
-from freqtrade.tests.conftest import log_has
+from freqtrade.tests.conftest import log_has, log_has_re
 
 
 @pytest.fixture(scope="function")
@@ -306,7 +307,7 @@ def test_setup_configuration_without_arguments(mocker, default_conf, caplog) -> 
     assert 'pair_whitelist' in config['exchange']
     assert 'datadir' in config
     assert log_has(
-        'Using data folder: {} ...'.format(config['datadir']),
+        'Using data directory: {} ...'.format(config['datadir']),
         caplog.record_tuples
     )
     assert 'ticker_interval' in config
@@ -356,15 +357,12 @@ def test_setup_configuration_with_arguments(mocker, default_conf, caplog) -> Non
     assert 'pair_whitelist' in config['exchange']
     assert 'datadir' in config
     assert log_has(
-        'Using data folder: {} ...'.format(config['datadir']),
+        'Using data directory: {} ...'.format(config['datadir']),
         caplog.record_tuples
     )
     assert 'ticker_interval' in config
-    assert log_has('Parameter -i/--ticker-interval detected ...', caplog.record_tuples)
-    assert log_has(
-        'Using ticker_interval: 1m ...',
-        caplog.record_tuples
-    )
+    assert log_has('Parameter -i/--ticker-interval detected ... Using ticker_interval: 1m ...',
+                   caplog.record_tuples)
 
     assert 'live' in config
     assert log_has('Parameter -l/--live detected ...', caplog.record_tuples)
@@ -421,15 +419,12 @@ def test_setup_configuration_with_stratlist(mocker, default_conf, caplog) -> Non
     assert 'pair_whitelist' in config['exchange']
     assert 'datadir' in config
     assert log_has(
-        'Using data folder: {} ...'.format(config['datadir']),
+        'Using data directory: {} ...'.format(config['datadir']),
         caplog.record_tuples
     )
     assert 'ticker_interval' in config
-    assert log_has('Parameter -i/--ticker-interval detected ...', caplog.record_tuples)
-    assert log_has(
-        'Using ticker_interval: 1m ...',
-        caplog.record_tuples
-    )
+    assert log_has('Parameter -i/--ticker-interval detected ... Using ticker_interval: 1m ...',
+                   caplog.record_tuples)
 
     assert 'strategy_list' in config
     assert log_has('Using strategy list of 2 Strategies', caplog.record_tuples)
@@ -463,8 +458,8 @@ def test_hyperopt_with_arguments(mocker, default_conf, caplog) -> None:
 
     assert 'epochs' in config
     assert int(config['epochs']) == 10
-    assert log_has('Parameter --epochs detected ...', caplog.record_tuples)
-    assert log_has('Will run Hyperopt with for 10 epochs ...', caplog.record_tuples)
+    assert log_has('Parameter --epochs detected ... Will run Hyperopt with for 10 epochs ...',
+                   caplog.record_tuples)
 
     assert 'spaces' in config
     assert config['spaces'] == ['all']
@@ -476,21 +471,52 @@ def test_hyperopt_with_arguments(mocker, default_conf, caplog) -> None:
 def test_check_exchange(default_conf, caplog) -> None:
     configuration = Configuration(Namespace())
 
-    # Test a valid exchange
+    # Test an officially supported by Freqtrade team exchange
     default_conf.get('exchange').update({'name': 'BITTREX'})
     assert configuration.check_exchange(default_conf)
+    assert log_has_re(r"Exchange .* is officially supported by the Freqtrade development team\.",
+                      caplog.record_tuples)
+    caplog.clear()
 
-    # Test a valid exchange
+    # Test an officially supported by Freqtrade team exchange
     default_conf.get('exchange').update({'name': 'binance'})
     assert configuration.check_exchange(default_conf)
+    assert log_has_re(r"Exchange .* is officially supported by the Freqtrade development team\.",
+                      caplog.record_tuples)
+    caplog.clear()
 
-    # Test a invalid exchange
+    # Test an available exchange, supported by ccxt
+    default_conf.get('exchange').update({'name': 'kraken'})
+    assert configuration.check_exchange(default_conf)
+    assert log_has_re(r"Exchange .* is supported by ccxt and .* not officially supported "
+                      r"by the Freqtrade development team\. .*",
+                      caplog.record_tuples)
+    caplog.clear()
+
+    # Test a 'bad' exchange, which known to have serious problems
+    default_conf.get('exchange').update({'name': 'bitmex'})
+    assert not configuration.check_exchange(default_conf)
+    assert log_has_re(r"Exchange .* is known to not work with the bot yet\. "
+                      r"Use it only for development and testing purposes\.",
+                      caplog.record_tuples)
+    caplog.clear()
+
+    # Test a 'bad' exchange with check_for_bad=False
+    default_conf.get('exchange').update({'name': 'bitmex'})
+    assert configuration.check_exchange(default_conf, False)
+    assert log_has_re(r"Exchange .* is supported by ccxt and .* not officially supported "
+                      r"by the Freqtrade development team\. .*",
+                      caplog.record_tuples)
+    caplog.clear()
+
+    # Test an invalid exchange
     default_conf.get('exchange').update({'name': 'unknown_exchange'})
     configuration.config = default_conf
 
     with pytest.raises(
         OperationalException,
-        match=r'.*Exchange "unknown_exchange" not supported.*'
+        match=r'.*Exchange "unknown_exchange" is not supported by ccxt '
+              r'and therefore not available for the bot.*'
     ):
         configuration.check_exchange(default_conf)
 
@@ -499,7 +525,7 @@ def test_cli_verbose_with_params(default_conf, mocker, caplog) -> None:
     mocker.patch('freqtrade.configuration.open', mocker.mock_open(
         read_data=json.dumps(default_conf)))
     # Prevent setting loggers
-    mocker.patch('freqtrade.configuration.set_loggers', MagicMock)
+    mocker.patch('freqtrade.loggers._set_loggers', MagicMock)
     arglist = ['-vvv']
     args = Arguments(arglist, '').get_parsed_arg()
 
@@ -521,7 +547,7 @@ def test_set_loggers() -> None:
     previous_value2 = logging.getLogger('ccxt.base.exchange').level
     previous_value3 = logging.getLogger('telegram').level
 
-    set_loggers()
+    _set_loggers()
 
     value1 = logging.getLogger('requests').level
     assert previous_value1 is not value1
@@ -535,13 +561,13 @@ def test_set_loggers() -> None:
     assert previous_value3 is not value3
     assert value3 is logging.INFO
 
-    set_loggers(log_level=2)
+    _set_loggers(verbosity=2)
 
     assert logging.getLogger('requests').level is logging.DEBUG
     assert logging.getLogger('ccxt.base.exchange').level is logging.INFO
     assert logging.getLogger('telegram').level is logging.INFO
 
-    set_loggers(log_level=3)
+    _set_loggers(verbosity=3)
 
     assert logging.getLogger('requests').level is logging.DEBUG
     assert logging.getLogger('ccxt.base.exchange').level is logging.DEBUG

@@ -12,7 +12,7 @@ and still take a long time.
 ## Prepare Hyperopting
 
 Before we start digging into Hyperopt, we recommend you to take a look at
-an example hyperopt file located into [user_data/hyperopts/](https://github.com/freqtrade/freqtrade/blob/develop/user_data/hyperopts/test_hyperopt.py)
+an example hyperopt file located into [user_data/hyperopts/](https://github.com/freqtrade/freqtrade/blob/develop/user_data/hyperopts/sample_hyperopt.py)
 
 Configuring hyperopt is similar to writing your own strategy, and many tasks will be similar and a lot of code can be copied across from the strategy.
 
@@ -34,7 +34,7 @@ Depending on the space you want to optimize, only some of the below are required
 
 ### 1. Install a Custom Hyperopt File
 
-Put your hyperopt file into the folder`user_data/hyperopts`.
+Put your hyperopt file into the directory `user_data/hyperopts`.
 
 Let assume you want a hyperopt file `awesome_hyperopt.py`:  
 Copy the file `user_data/hyperopts/sample_hyperopt.py` into `user_data/hyperopts/awesome_hyperopt.py`
@@ -70,6 +70,11 @@ Place the corresponding settings into the following methods
 
 The configuration and rules are the same than for buy signals.
 To avoid naming collisions in the search-space, please prefix all sell-spaces with `sell-`.
+
+#### Using ticker-interval as part of the Strategy
+
+The Strategy exposes the ticker-interval as `self.ticker_interval`. The same value is available as class-attribute `HyperoptName.ticker_interval`.
+In the case of the linked sample-value this would be `SampleHyperOpts.ticker_interval`.
 
 ## Solving a Mystery
 
@@ -122,9 +127,10 @@ So let's write the buy strategy using these values:
                         dataframe['macd'], dataframe['macdsignal']
                     ))
 
-            dataframe.loc[
-                reduce(lambda x, y: x & y, conditions),
-                'buy'] = 1
+            if conditions:
+                dataframe.loc[
+                    reduce(lambda x, y: x & y, conditions),
+                    'buy'] = 1
 
             return dataframe
 
@@ -152,7 +158,7 @@ Because hyperopt tries a lot of combinations to find the best parameters it will
 We strongly recommend to use `screen` or `tmux` to prevent any connection loss.
 
 ```bash
-python3 freqtrade -c config.json hyperopt --customhyperopt <hyperoptname> -e 5000 --spaces all
+freqtrade -c config.json hyperopt --customhyperopt <hyperoptname> -e 5000 --spaces all
 ```
 
 Use  `<hyperoptname>` as the name of the custom hyperopt used.
@@ -178,7 +184,7 @@ you want to use. The last N ticks/timeframes will be used.
 Example:
 
 ```bash
-python3 freqtrade hyperopt --timerange -200
+freqtrade hyperopt --timerange -200
 ```
 
 ### Running Hyperopt with Smaller Search Space

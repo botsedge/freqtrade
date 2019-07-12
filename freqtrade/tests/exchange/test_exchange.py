@@ -124,14 +124,14 @@ def test_exchange_resolver(default_conf, mocker, caplog):
                       caplog.record_tuples)
     caplog.clear()
 
-    exchange = ExchangeResolver('Kraken', default_conf).exchange
+    exchange = ExchangeResolver('kraken', default_conf).exchange
     assert isinstance(exchange, Exchange)
     assert isinstance(exchange, Kraken)
     assert not isinstance(exchange, Binance)
     assert not log_has_re(r"No .* specific subclass found. Using the generic class instead.",
                           caplog.record_tuples)
 
-    exchange = ExchangeResolver('Binance', default_conf).exchange
+    exchange = ExchangeResolver('binance', default_conf).exchange
     assert isinstance(exchange, Exchange)
     assert isinstance(exchange, Binance)
     assert not isinstance(exchange, Kraken)
@@ -393,6 +393,45 @@ def test_validate_timeframes_failed(default_conf, mocker):
     mocker.patch('freqtrade.exchange.Exchange._load_markets', MagicMock(return_value={}))
     mocker.patch('freqtrade.exchange.Exchange.validate_pairs', MagicMock())
     with pytest.raises(OperationalException, match=r'Invalid ticker 3m, this Exchange supports.*'):
+        Exchange(default_conf)
+
+
+def test_validate_timeframes_emulated_ohlcv_1(default_conf, mocker):
+    default_conf["ticker_interval"] = "3m"
+    api_mock = MagicMock()
+    id_mock = PropertyMock(return_value='test_exchange')
+    type(api_mock).id = id_mock
+
+    # delete timeframes so magicmock does not autocreate it
+    del api_mock.timeframes
+
+    mocker.patch('freqtrade.exchange.Exchange._init_ccxt', MagicMock(return_value=api_mock))
+    mocker.patch('freqtrade.exchange.Exchange._load_markets', MagicMock(return_value={}))
+    mocker.patch('freqtrade.exchange.Exchange.validate_pairs', MagicMock())
+    with pytest.raises(OperationalException,
+                       match=r'The ccxt library does not provide the list of timeframes '
+                             r'for the exchange ".*" and this exchange '
+                             r'is therefore not supported. *'):
+        Exchange(default_conf)
+
+
+def test_validate_timeframes_emulated_ohlcvi_2(default_conf, mocker):
+    default_conf["ticker_interval"] = "3m"
+    api_mock = MagicMock()
+    id_mock = PropertyMock(return_value='test_exchange')
+    type(api_mock).id = id_mock
+
+    # delete timeframes so magicmock does not autocreate it
+    del api_mock.timeframes
+
+    mocker.patch('freqtrade.exchange.Exchange._init_ccxt', MagicMock(return_value=api_mock))
+    mocker.patch('freqtrade.exchange.Exchange._load_markets',
+                 MagicMock(return_value={'timeframes': None}))
+    mocker.patch('freqtrade.exchange.Exchange.validate_pairs', MagicMock())
+    with pytest.raises(OperationalException,
+                       match=r'The ccxt library does not provide the list of timeframes '
+                             r'for the exchange ".*" and this exchange '
+                             r'is therefore not supported. *'):
         Exchange(default_conf)
 
 
@@ -893,7 +932,7 @@ def test_get_ticker(default_conf, mocker, exchange_name):
         'last': 0.0001,
     }
     api_mock.fetch_ticker = MagicMock(return_value=tick)
-    api_mock.markets = {'ETH/BTC': {}}
+    api_mock.markets = {'ETH/BTC': {'active': True}}
     exchange = get_patched_exchange(mocker, default_conf, api_mock, id=exchange_name)
     # retrieve original ticker
     ticker = exchange.get_ticker(pair='ETH/BTC')
@@ -1016,7 +1055,7 @@ def test_refresh_latest_ohlcv(mocker, default_conf, caplog) -> None:
     exchange.refresh_latest_ohlcv([('IOTA/ETH', '5m'), ('XRP/ETH', '5m')])
 
     assert exchange._api_async.fetch_ohlcv.call_count == 2
-    assert log_has(f"Using cached ohlcv data for {pairs[0][0]}, {pairs[0][1]} ...",
+    assert log_has(f"Using cached ohlcv data for pair {pairs[0][0]}, interval {pairs[0][1]} ...",
                    caplog.record_tuples)
 
 
@@ -1435,3 +1474,46 @@ def test_stoploss_limit_order_dry_run(default_conf, mocker):
     assert order['type'] == order_type
     assert order['price'] == 220
     assert order['amount'] == 1
+
+
+def test_merge_ft_has_dict(default_conf, mocker):
+    mocker.patch.multiple('freqtrade.exchange.Exchange',
+                          _init_ccxt=MagicMock(return_value=MagicMock()),
+                          _load_async_markets=MagicMock(),
+                          validate_pairs=MagicMock(),
+                          validate_timeframes=MagicMock())
+    ex = Exchange(default_conf)
+    assert ex._ft_has == Exchange._ft_has_default
+
+    ex = Kraken(default_conf)
+    assert ex._ft_has == Exchange._ft_has_default
+
+    # Binance defines different values
+    ex = Binance(default_conf)
+    assert ex._ft_has != Exchange._ft_has_default
+    assert ex._ft_has['stoploss_on_exchange']
+    assert ex._ft_has['order_time_in_force'] == ['gtc', 'fok', 'ioc']
+
+    conf = copy.deepcopy(default_conf)
+    conf['exchange']['_ft_has_params'] = {"DeadBeef": 20,
+                                          "stoploss_on_exchange": False}
+    # Use settings from configuration (overriding stoploss_on_exchange)
+    ex = Binance(conf)
+    assert ex._ft_has != Exchange._ft_has_default
+    assert not ex._ft_has['stoploss_on_exchange']
+    assert ex._ft_has['DeadBeef'] == 20
+
+
+def test_get_valid_pair_combination(default_conf, mocker, markets):
+    mocker.patch.multiple('freqtrade.exchange.Exchange',
+                          _init_ccxt=MagicMock(return_value=MagicMock()),
+                          _load_async_markets=MagicMock(),
+                          validate_pairs=MagicMock(),
+                          validate_timeframes=MagicMock(),
+                          markets=PropertyMock(return_value=markets))
+    ex = Exchange(default_conf)
+
+    assert ex.get_valid_pair_combination("ETH", "BTC") == "ETH/BTC"
+    assert ex.get_valid_pair_combination("BTC", "ETH") == "ETH/BTC"
+    with pytest.raises(DependencyException, match=r"Could not combine.* to get a valid pair."):
+        ex.get_valid_pair_combination("NOPAIR", "ETH")

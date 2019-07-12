@@ -67,7 +67,7 @@ Mandatory Parameters are marked as **Required**.
 | `initial_state` | running | Defines the initial application state. More information below.
 | `forcebuy_enable` | false | Enables the RPC Commands to force a buy. More information below.
 | `strategy` | DefaultStrategy | Defines Strategy class to use.
-| `strategy_path` | null | Adds an additional strategy lookup path (must be a folder).
+| `strategy_path` | null | Adds an additional strategy lookup path (must be a directory).
 | `internals.process_throttle_secs` | 5 | **Required.** Set the process throttle. Value in second.
 | `internals.sd_notify` | false | Enables use of the sd_notify protocol to tell systemd service manager about changes in the bot state and issue keep-alive pings. See [here](installation.md#7-optional-configure-freqtrade-as-a-systemd-service) for more details.
 | `logfile` | | Specify Logfile. Uses a rolling strategy of 10 files, with 1Mb per file.
@@ -131,17 +131,11 @@ If it is not set in either Strategy or Configuration, a default of 1000% `{"0": 
 
 ### Understand stoploss
 
-The `stoploss` configuration parameter is loss in percentage that should trigger a sale.
-For example, value `-0.10` will cause immediate sell if the
-profit dips below -10% for a given trade. This parameter is optional.
-
-Most of the strategy files already include the optimal `stoploss`
-value. This parameter is optional. If you use it in the configuration file, it will take over the
-`stoploss` value from the strategy file.
+Go to the [stoploss documentation](stoploss.md) for more details.
 
 ### Understand trailing stoploss
 
-Go to the [trailing stoploss Documentation](stoploss.md) for details on trailing stoploss.
+Go to the [trailing stoploss Documentation](stoploss.md#trailing-stop-loss) for details on trailing stoploss.
 
 ### Understand initial_state
 
@@ -191,14 +185,28 @@ If this is configured, all 4 values (`buy`, `sell`, `stoploss` and
 `stoploss_on_exchange`) need to be present, otherwise the bot will warn about it and fail to start.
 The below is the default which is used if this is not configured in either strategy or configuration file.
 
+Syntax for Strategy:
+
 ```python
-"order_types": {
+order_types = {
     "buy": "limit",
     "sell": "limit",
     "stoploss": "market",
     "stoploss_on_exchange": False,
     "stoploss_on_exchange_interval": 60
-},
+}
+```
+
+Configuration:
+
+```json
+"order_types": {
+    "buy": "limit",
+    "sell": "limit",
+    "stoploss": "market",
+    "stoploss_on_exchange": false,
+    "stoploss_on_exchange_interval": 60
+}
 ```
 
 !!! Note
@@ -287,8 +295,27 @@ This configuration enables binance, as well as rate limiting to avoid bans from 
 
 !!! Note
     Optimal settings for rate limiting depend on the exchange and the size of the whitelist, so an ideal parameter will vary on many other settings.
-    We try to provide sensible defaults per exchange where possible, if you encounter bans please make sure that `"enableRateLimit"` is enabled and increase the `"rateLimit"` parameter step by step. 
+    We try to provide sensible defaults per exchange where possible, if you encounter bans please make sure that `"enableRateLimit"` is enabled and increase the `"rateLimit"` parameter step by step.
 
+#### Advanced FreqTrade Exchange configuration
+
+Advanced options can be configured using the `_ft_has_params` setting, which will override Defaults and exchange-specific behaviours.
+
+Available options are listed in the exchange-class as `_ft_has_default`.
+
+For example, to test the order type `FOK` with Kraken, and modify candle_limit to 200 (so you only get 200 candles per call):
+
+```json
+"exchange": {
+    "name": "kraken",
+    "_ft_has_params": {
+        "order_time_in_force": ["gtc", "fok"],
+        "ohlcv_candle_limit": 200
+        }
+```
+
+!!! Warning
+    Please make sure to fully understand the impacts of these settings before modifying them.
 
 ### What values can be used for fiat_display_currency?
 

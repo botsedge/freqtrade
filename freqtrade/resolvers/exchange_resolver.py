@@ -22,11 +22,13 @@ class ExchangeResolver(IResolver):
         Load the custom class from config parameter
         :param config: configuration dictionary
         """
+        exchange_name = exchange_name.title()
         try:
             self.exchange = self._load_exchange(exchange_name, kwargs={'config': config})
         except ImportError:
             logger.info(
                 f"No {exchange_name} specific subclass found. Using the generic class instead.")
+        if not hasattr(self, "exchange"):
             self.exchange = Exchange(config)
 
     def _load_exchange(
